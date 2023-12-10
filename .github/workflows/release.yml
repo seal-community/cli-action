@@ -30,11 +30,11 @@ jobs:
           tag_name: ${{ steps.get-version.outputs.new_version }}
           release_name: Release ${{ steps.get-version.outputs.new_version }}
           draft: false
-      - name: "Override latest"
+      - name: "Delete latest"
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete latest --cleanup-tag --yes --repo ${{ github.repository }} || true
+          gh release delete "latest" --cleanup-tag --yes --repo ${{ github.repository }} || true
       - name: "Create release"
         uses: actions/create-release@v1
         env:
@@ -43,4 +43,8 @@ jobs:
           tag_name: "latest"
           release_name: "Release latest"
           draft: false
-
+      - name: "Override latest"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release edit "latest" --draft=false --latest
