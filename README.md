@@ -1,1 +1,1 @@
-# cli-action
+# Seal CLI Action
