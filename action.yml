@@ -5,7 +5,7 @@ description: "Runs Seal CLI on a target directory"
 author: "Seal Community"
 
 branding:
-  icon: "key"
+  icon: "shield"
   color: "blue"
 
 inputs:
@@ -16,7 +16,7 @@ inputs:
     description: "Target dir"
     default: "."
   mode:
-    description: "Fix or scan; scan requires sealtoken as env"
+    description: "Fix or scan; scan requires seal token as env"
     default: "scan"
   verbosity:
     description: "Verbosity: v, vv, vvv"
