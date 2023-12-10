@@ -1,11 +1,11 @@
-name: "cli-action"
+name: "Seal CLI Action"
 
 description: "Runs Seal CLI on a target directory"
 
 author: "Seal Community"
 
 branding:
-  icon: "thumbs-up"
+  icon: "key"
   color: "blue"
 
 inputs:

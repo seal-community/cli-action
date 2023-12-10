@@ -21,7 +21,7 @@ jobs:
       - name: "Get version"
         id: get-version
         run: |
-          echo "new_version=$(cat VERSION)" >> ${GITHUB_OUTPUT}
+          echo "new_version=v$(cat VERSION)" >> ${GITHUB_OUTPUT}
       - name: "Create release"
         uses: actions/create-release@v1
         env:
