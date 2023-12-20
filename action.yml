@@ -63,5 +63,4 @@ runs:
         if [[ "${{ inputs.summary}}" != "" ]] && [[ "${{ inputs.mode }}" == "fix" ]]; then
             SUMMARY_PARAM="--summarize ${{ inputs.summary}}"
         fi
-        SEAL_TOKEN=${{ inputs.CLI_TOKEN }} ${{ steps.download.outputs.cli_path }} -${{ inputs.verbosity }} ${{ inputs.mode }} ${{ inputs.target }} ${SUMMARY_PARAM}
-
+        SEAL_PROJECT=${{ inputs.project }} SEAL_TOKEN=${{ inputs.CLI_TOKEN }} ${{ steps.download.outputs.cli_path }} -${{ inputs.verbosity }} ${{ inputs.mode }} ${{ inputs.target }} ${SUMMARY_PARAM}
