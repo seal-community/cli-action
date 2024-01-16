@@ -26,7 +26,7 @@ inputs:
     default: ""
   project:
     description: "Used as part of cli authentication for fix command, can be any* value"
-    default: "ci"
+    default: ""
   CLI_TOKEN:
     required: false # required for fix mode
     description: "Same token used by npm client. Usually called SEAL_NPM_TOKEN (without the project)"
