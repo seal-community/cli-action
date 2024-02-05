@@ -20,7 +20,7 @@ inputs:
     default: "scan"
   verbosity:
     description: "Verbosity: v, vv, vvv"
-    default: "vv"
+    default: "v"
   summary:
     description: "Path to summary file, by default does not generate; only relevant for 'fix' mode"
     default: ""
