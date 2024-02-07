@@ -18,6 +18,9 @@ inputs:
   mode:
     description: "Fix or scan; scan requires seal token as env"
     default: "scan"
+  fix_mode:
+    description: "local or all; fix according to the local config or fix everything"
+    default: "local"
   verbosity:
     description: "Verbosity: v, vv, vvv"
     default: "v"
@@ -40,6 +43,12 @@ runs:
       run: |
         echo "::error::Unsupported runner os: ${{ runner.os }}"
         exit 1
+    - name: "Set Fix Mode"
+      id: fix_mode_flag
+      shell: bash
+      if: inputs.mode == 'fix'
+      run: |
+        echo "fix_mode_flag=--mode ${{ inputs.fix_mode }}" >> ${GITHUB_OUTPUT}
     - name: "Download CLI - Linux"
       id: download
       shell: bash
@@ -63,4 +72,4 @@ runs:
         if [[ "${{ inputs.summary}}" != "" ]] && [[ "${{ inputs.mode }}" == "fix" ]]; then
             SUMMARY_PARAM="--summarize ${{ inputs.summary}}"
         fi
-        SEAL_PROJECT=${{ inputs.project }} SEAL_TOKEN=${{ inputs.CLI_TOKEN }} ${{ steps.download.outputs.cli_path }} -${{ inputs.verbosity }} ${{ inputs.mode }} ${{ inputs.target }} ${SUMMARY_PARAM}
+        SEAL_PROJECT=${{ inputs.project }} SEAL_TOKEN=${{ inputs.CLI_TOKEN }} ${{ steps.download.outputs.cli_path }} -${{ inputs.verbosity }} ${{ inputs.mode }} ${{ steps.fix_mode_flag.outputs.fix_mode_flag }} ${{ inputs.target }} ${SUMMARY_PARAM}
