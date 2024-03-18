@@ -32,7 +32,10 @@ inputs:
     default: ""
   CLI_TOKEN:
     required: false # required for fix mode
-    description: "Same token used by npm client. Usually called SEAL_NPM_TOKEN (without the project)"
+    description: "Authentication token to the seal artifact server"
+  token:
+    required: false # required for fix mode. only one of CLI_TOKEN and token is required
+    description: "Authentication token to the seal artifact server"
 
 runs:
   using: "composite"
@@ -49,6 +52,17 @@ runs:
       if: inputs.mode == 'fix'
       run: |
         echo "fix_mode_flag=--mode ${{ inputs.fix_mode }}" >> ${GITHUB_OUTPUT}
+    - name: "Determine token value"
+      id: determine_token
+      shell: bash
+      run: |
+        if [[ "${{ inputs.token }}" ]]; then
+          echo "token=${{ inputs.token }}" >> ${GITHUB_OUTPUT}
+        elif [[ "${{ inputs.CLI_TOKEN }}" ]]; then
+          echo "token=${{ inputs.CLI_TOKEN }}" >> ${GITHUB_OUTPUT}
+        else
+          echo "token=" >> ${GITHUB_OUTPUT}
+        fi
     - name: "Download CLI - Linux"
       id: download
       shell: bash
@@ -72,4 +86,4 @@ runs:
         if [[ "${{ inputs.summary}}" != "" ]] && [[ "${{ inputs.mode }}" == "fix" ]]; then
             SUMMARY_PARAM="--summarize ${{ inputs.summary}}"
         fi
-        SEAL_PROJECT=${{ inputs.project }} SEAL_TOKEN=${{ inputs.CLI_TOKEN }} ${{ steps.download.outputs.cli_path }} -${{ inputs.verbosity }} ${{ inputs.mode }} ${{ steps.fix_mode_flag.outputs.fix_mode_flag }} ${{ inputs.target }} ${SUMMARY_PARAM}
+        SEAL_PROJECT=${{ inputs.project }} SEAL_TOKEN=${{ steps.determine_token.outputs.token }} ${{ steps.download.outputs.cli_path }} -${{ inputs.verbosity }} ${{ inputs.mode }} ${{ steps.fix_mode_flag.outputs.fix_mode_flag }} ${{ inputs.target }} ${SUMMARY_PARAM}
