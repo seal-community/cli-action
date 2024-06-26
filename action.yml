@@ -30,6 +30,9 @@ inputs:
   project:
     description: "Used as part of cli authentication for fix command, can be any* value"
     default: ""
+  upload_scan_results:
+    description: "Uploads the list of vulnerable packages to the Seal platform"
+    default: "false"
   CLI_TOKEN:
     required: false # required for fix mode
     description: "Authentication token to the seal artifact server"
@@ -83,7 +86,11 @@ runs:
       run: |
         echo "Running cli from ${{ steps.download.outputs.cli_path }}"
         SUMMARY_PARAM=""
-        if [[ "${{ inputs.summary}}" != "" ]] && [[ "${{ inputs.mode }}" == "fix" ]]; then
+        if [[ "${{ inputs.summary }}" != "" ]] && [[ "${{ inputs.mode }}" == "fix" ]]; then
             SUMMARY_PARAM="--summarize ${{ inputs.summary}}"
         fi
-        SEAL_PROJECT=${{ inputs.project }} SEAL_TOKEN=${{ steps.determine_token.outputs.token }} ${{ steps.download.outputs.cli_path }} -${{ inputs.verbosity }} ${{ inputs.mode }} ${{ steps.fix_mode_flag.outputs.fix_mode_flag }} ${{ inputs.target }} ${SUMMARY_PARAM}
+        UPLOAD_SCAN_RESULTS=""
+        if [[ "${{ inputs.upload_scan_results }}" == "true" ]]; then
+            UPLOAD_SCAN_RESULTS="--upload-scan-results"
+        fi
+        SEAL_PROJECT=${{ inputs.project }} SEAL_TOKEN=${{ steps.determine_token.outputs.token }} ${{ steps.download.outputs.cli_path }} -${{ inputs.verbosity }} ${{ inputs.mode }} ${{ steps.fix_mode_flag.outputs.fix_mode_flag }} ${{ inputs.target }} ${SUMMARY_PARAM} ${UPLOAD_SCAN_RESULTS} 
