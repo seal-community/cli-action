@@ -13,8 +13,8 @@ inputs:
     description: "CLI version to use, same as a tag - e.g. v0.1.0; empty will use latest"
     default: ""
   target:
-    description: "Path to manifest file declaring the dependencies, such as 'requirements.txt', 'package-lock.json', etc. "
-    default: "requirements.txt"
+    description: "Target dir"
+    default: "."
   mode:
     description: "Fix or scan; scan requires seal token as env"
     default: "scan"
