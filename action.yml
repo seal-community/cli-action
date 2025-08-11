@@ -87,7 +87,7 @@ runs:
         echo "Running cli from ${{ steps.download.outputs.cli_path }}"
         SUMMARY_PARAM=""
         if [[ "${{ inputs.summary }}" != "" ]] && [[ "${{ inputs.mode }}" == "fix" ]]; then
-            SUMMARY_PARAM="--summarize ${{ inputs.summary}}"
+            SUMMARY_PARAM="--summarize --summary-file-path ${{ inputs.summary}}"
         fi
         UPLOAD_SCAN_RESULTS=""
         if [[ "${{ inputs.upload_scan_results }}" == "true" ]]; then
