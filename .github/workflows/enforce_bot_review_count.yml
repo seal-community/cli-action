@@ -1,0 +1,12 @@
+name: "Enforce review count for bot-authored PRs"
+
+on:
+  pull_request_review:
+    types: [submitted, dismissed]
+
+jobs:
+  call-enforce-bot-review-count:
+    permissions:
+      pull-requests: read
+      contents: read
+    uses: seal-sec/lib-github/.github/workflows/enforce_bot_review_count.yml@v0.15
