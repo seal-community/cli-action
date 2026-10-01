@@ -15,6 +15,11 @@ Incorporating the CLI action is very simple. Just add the following code immedia
     project: <project-id>
 ```
 
+## Signature verification
+Before running the CLI, the action checks that the download was signed by Seal. It installs [cosign](https://github.com/sigstore/cosign) and verifies the signature bundle shipped in the CLI zip against Seal's public release signing key, which is built into the action. If the check fails, the job fails before the CLI runs.
+
+CLI versions released before v0.3.365 are not signed, so the check fails for them. To run one of them, or to turn verification off, set `verify_signature: false`.
+
 ## Flags
 `fix_mode`: If the `mode` is `fix`, then the `fix_mode` sets how the CLI decides what packages to fix. `local` only fixes packages according to the [local configuration file](https://docs.sealsecurity.io/fundamentals/cli/fixing-specific-packages), whereas `all` fixes everything that has an available sealed version. The default value is `local`.
 
@@ -29,6 +34,8 @@ Incorporating the CLI action is very simple. Just add the following code immedia
 `token`: The authentication token to the Seal artifact server.
 
 `verbosity`: Sets the verbosity level of the CLI: `v`, `vv` or `vvv`. By default `v`.
+
+`verify_signature`: Verifies the downloaded CLI against Seal's release signing key before running it. Only `false` turns it off; any other value verifies. By default `true`.
 
 `version`: The CLI version to use, for example v0.1.0. By default the latest version will be used.
 

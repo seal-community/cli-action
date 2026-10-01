@@ -33,6 +33,9 @@ inputs:
   upload_scan_results:
     description: "Uploads the list of vulnerable packages to the Seal platform"
     default: "false"
+  verify_signature:
+    description: "Verifies the downloaded CLI against Seal's release signing key with cosign before running it; only 'false' turns it off"
+    default: "true"
   CLI_TOKEN:
     required: false # required for fix mode
     description: "Authentication token to the seal artifact server"
@@ -80,7 +83,28 @@ runs:
         gh --repo "${{ env.cli-repo }}" release download "${{ inputs.version }}" -p "${ZIP_NAME}" --output "${{ runner.temp }}/${ZIP_NAME}"
         unzip ${{ runner.temp }}/${ZIP_NAME} -d ${{ runner.temp }}
         echo "cli_path=${{ runner.temp }}/seal" >> ${GITHUB_OUTPUT}
-        ${{ runner.temp }}/seal version
+    - name: "Install cosign"
+      if: runner.os == 'Linux' && inputs.verify_signature != 'false'
+      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      with:
+        cosign-release: "v3.1.3"
+    - name: "Verify CLI signature"
+      if: runner.os == 'Linux' && inputs.verify_signature != 'false'
+      shell: bash
+      env:
+        CLI_DIR: ${{ runner.temp }}
+        SEAL_CLI_PUBLIC_KEY: |
+          -----BEGIN PUBLIC KEY-----
+          MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEEYDZPJicyOmWP4o/Ul9joeSUMW3L
+          L7vSXIFZ7UH01UfYw+jLnwYI3ELErC7aMFeGjGqA+GrACLrytNvWXqU4cQ==
+          -----END PUBLIC KEY-----
+      run: |
+        if [[ ! -f "${CLI_DIR}/seal.sigstore.json" ]]; then
+          echo "::error::The Seal CLI release has no signature bundle (seal.sigstore.json). Older releases are unsigned; set verify_signature: false to run them"
+          exit 1
+        fi
+        printf '%s' "${SEAL_CLI_PUBLIC_KEY}" > "${CLI_DIR}/seal-cli.pub"
+        cosign verify-blob --key "${CLI_DIR}/seal-cli.pub" --bundle "${CLI_DIR}/seal.sigstore.json" "${CLI_DIR}/seal"
     - name: "Run CLI"
       shell: bash
       run: |
