@@ -34,7 +34,7 @@ inputs:
     description: "Uploads the list of vulnerable packages to the Seal platform"
     default: "false"
   verify_signature:
-    description: "Verifies the downloaded CLI against Seal's release signing key with cosign before running it; only 'false' turns it off"
+    description: "Verifies the downloaded CLI's signature before running it: cosign with Seal's release signing key on Linux and Windows, Seal's Apple Developer ID and notarization on macOS; only 'false' turns it off"
     default: "true"
   CLI_TOKEN:
     required: false # required for fix mode
@@ -46,12 +46,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: "Download CLI - Other"
-      if: runner.os != 'Linux'
-      shell: bash
-      run: |
-        echo "::error::Unsupported runner os: ${{ runner.os }}"
-        exit 1
     - name: "Set Fix Mode"
       id: fix_mode_flag
       shell: bash
@@ -69,46 +63,112 @@ runs:
         else
           echo "token=" >> ${GITHUB_OUTPUT}
         fi
-    - name: "Download CLI - Linux"
+    - name: "Download CLI"
       id: download
       shell: bash
-      if: runner.os == 'Linux'
       env:
         GH_TOKEN: ${{ github.token }}
-        cli-repo: "seal-community/cli"
+        CLI_REPO: "seal-community/cli"
+        CLI_VERSION: ${{ inputs.version }}
       run: |
-        ZIP_NAME="seal-linux-amd64*.zip" # wildcard to support version in asset name
+        # wildcards because the asset names include the version
+        case "${RUNNER_OS}-${RUNNER_ARCH}" in
+          Linux-X64) ASSET="seal-linux-amd64*.zip" ;;
+          Linux-ARM64) ASSET="seal-linux-arm64*.zip" ;;
+          Windows-X64) ASSET="seal-windows-amd64*.zip" ;;
+          macOS-X64) ASSET="seal-darwin-amd64*.pkg" ;;
+          macOS-ARM64) ASSET="seal-darwin-arm64*.pkg" ;;
+          *)
+            echo "::error::Unsupported runner: ${RUNNER_OS} ${RUNNER_ARCH}"
+            exit 1
+            ;;
+        esac
+        CLI_DIR="${RUNNER_TEMP}/seal-cli"
+        if [[ "${RUNNER_OS}" == "Windows" ]]; then
+          CLI_DIR="$(cygpath -u "${RUNNER_TEMP}")/seal-cli"
+        fi
         # not concurrent-safe for multiple jobs
-        echo "Downloading zip ${ZIP_NAME}"
-        gh --repo "${{ env.cli-repo }}" release download "${{ inputs.version }}" -p "${ZIP_NAME}" --output "${{ runner.temp }}/${ZIP_NAME}"
-        unzip ${{ runner.temp }}/${ZIP_NAME} -d ${{ runner.temp }}
-        echo "cli_path=${{ runner.temp }}/seal" >> ${GITHUB_OUTPUT}
+        rm -rf "${CLI_DIR}"
+        mkdir -p "${CLI_DIR}"
+        echo "Downloading ${ASSET}"
+        gh --repo "${CLI_REPO}" release download "${CLI_VERSION}" -p "${ASSET}" --dir "${CLI_DIR}"
+        ARCHIVES=("${CLI_DIR}"/${ASSET})
+        if [[ ${#ARCHIVES[@]} -ne 1 ]]; then
+          echo "::error::Expected one release asset matching ${ASSET}, found ${#ARCHIVES[@]}"
+          exit 1
+        fi
+        ARCHIVE="${ARCHIVES[0]}"
+        case "${RUNNER_OS}" in
+          Linux)
+            unzip -q "${ARCHIVE}" -d "${CLI_DIR}"
+            CLI_PATH="${CLI_DIR}/seal"
+            ;;
+          Windows)
+            unzip -q "${ARCHIVE}" -d "${CLI_DIR}"
+            CLI_PATH="${CLI_DIR}/seal.exe"
+            ;;
+          macOS)
+            # the pkg installs into /usr/local/bin; expanding it instead needs no sudo
+            pkgutil --expand-full "${ARCHIVE}" "${CLI_DIR}/pkg"
+            CLI_PATH="${CLI_DIR}/pkg/Payload/seal"
+            ;;
+        esac
+        echo "cli_dir=${CLI_DIR}" >> ${GITHUB_OUTPUT}
+        echo "archive_path=${ARCHIVE}" >> ${GITHUB_OUTPUT}
+        echo "cli_path=${CLI_PATH}" >> ${GITHUB_OUTPUT}
     - name: "Install cosign"
-      if: runner.os == 'Linux' && inputs.verify_signature != 'false'
+      if: runner.os != 'macOS' && inputs.verify_signature != 'false'
       uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       with:
         cosign-release: "v3.1.3"
-    - name: "Verify CLI signature"
-      if: runner.os == 'Linux' && inputs.verify_signature != 'false'
+    - name: "Verify CLI signature - Linux and Windows"
+      if: runner.os != 'macOS' && inputs.verify_signature != 'false'
       shell: bash
       env:
-        CLI_DIR: ${{ runner.temp }}
+        CLI_DIR: ${{ steps.download.outputs.cli_dir }}
+        CLI_PATH: ${{ steps.download.outputs.cli_path }}
         SEAL_CLI_PUBLIC_KEY: |
           -----BEGIN PUBLIC KEY-----
           MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEEYDZPJicyOmWP4o/Ul9joeSUMW3L
           L7vSXIFZ7UH01UfYw+jLnwYI3ELErC7aMFeGjGqA+GrACLrytNvWXqU4cQ==
           -----END PUBLIC KEY-----
       run: |
-        if [[ ! -f "${CLI_DIR}/seal.sigstore.json" ]]; then
-          echo "::error::The Seal CLI release has no signature bundle (seal.sigstore.json). Older releases are unsigned; set verify_signature: false to run them"
+        # the bundle is named like the binary: seal.sigstore.json, or seal.exe.sigstore.json on Windows
+        BUNDLE="${CLI_PATH}.sigstore.json"
+        if [[ ! -f "${BUNDLE}" ]]; then
+          echo "::error::The Seal CLI release has no signature bundle ($(basename "${BUNDLE}")). Linux releases before v0.3.365 and Windows releases before v0.3.370 are unsigned; set verify_signature: false to run them"
           exit 1
         fi
         printf '%s' "${SEAL_CLI_PUBLIC_KEY}" > "${CLI_DIR}/seal-cli.pub"
-        cosign verify-blob --key "${CLI_DIR}/seal-cli.pub" --bundle "${CLI_DIR}/seal.sigstore.json" "${CLI_DIR}/seal"
+        cosign verify-blob --key "${CLI_DIR}/seal-cli.pub" --bundle "${BUNDLE}" "${CLI_PATH}"
+    - name: "Verify CLI signature - macOS"
+      if: runner.os == 'macOS' && inputs.verify_signature != 'false'
+      shell: bash
+      env:
+        PKG_PATH: ${{ steps.download.outputs.archive_path }}
+        CLI_PATH: ${{ steps.download.outputs.cli_path }}
+        SEAL_APPLE_TEAM_ID: "SNZS6SJMFA"
+      run: |
+        # the installer must be notarized and both it and the binary must carry Seal's Apple Developer ID signature
+        PKG_SIGNATURE=$(pkgutil --check-signature "${PKG_PATH}")
+        echo "${PKG_SIGNATURE}"
+        if ! grep -q "Status: signed by a developer certificate issued by Apple for distribution" <<< "${PKG_SIGNATURE}" \
+          || ! grep -q "1\. Developer ID Installer: .*(${SEAL_APPLE_TEAM_ID})" <<< "${PKG_SIGNATURE}"; then
+          echo "::error::The Seal CLI installer is not signed with Seal's Apple Developer ID"
+          exit 1
+        fi
+        if ! grep -q "Notarization: trusted by the Apple notary service" <<< "${PKG_SIGNATURE}"; then
+          echo "::error::The Seal CLI installer is not notarized by Apple"
+          exit 1
+        fi
+        codesign --verify --strict --verbose=2 \
+          -R="anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = \"${SEAL_APPLE_TEAM_ID}\"" \
+          "${CLI_PATH}"
     - name: "Run CLI"
       shell: bash
       run: |
-        echo "Running cli from ${{ steps.download.outputs.cli_path }}"
+        CLI_PATH="${{ steps.download.outputs.cli_path }}"
+        echo "Running cli from ${CLI_PATH}"
         SUMMARY_PARAM=""
         if [[ "${{ inputs.summary }}" != "" ]] && [[ "${{ inputs.mode }}" == "fix" ]]; then
             SUMMARY_PARAM="--summarize --summary-file-path ${{ inputs.summary}}"
@@ -117,4 +177,4 @@ runs:
         if [[ "${{ inputs.upload_scan_results }}" == "true" ]]; then
             UPLOAD_SCAN_RESULTS="--upload-scan-results"
         fi
-        SEAL_PROJECT=${{ inputs.project }} SEAL_TOKEN=${{ steps.determine_token.outputs.token }} ${{ steps.download.outputs.cli_path }} -${{ inputs.verbosity }} ${{ inputs.mode }} ${{ steps.fix_mode_flag.outputs.fix_mode_flag }} ${{ inputs.target }} ${SUMMARY_PARAM} ${UPLOAD_SCAN_RESULTS} 
+        SEAL_PROJECT=${{ inputs.project }} SEAL_TOKEN=${{ steps.determine_token.outputs.token }} "${CLI_PATH}" -${{ inputs.verbosity }} ${{ inputs.mode }} ${{ steps.fix_mode_flag.outputs.fix_mode_flag }} ${{ inputs.target }} ${SUMMARY_PARAM} ${UPLOAD_SCAN_RESULTS} 
