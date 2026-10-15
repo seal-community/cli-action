@@ -67,22 +67,24 @@ runs:
       id: download
       shell: bash
       env:
-        GH_TOKEN: ${{ github.token }}
         CLI_REPO: "seal-community/cli"
         CLI_VERSION: ${{ inputs.version }}
       run: |
-        # wildcards because the asset names include the version
         case "${RUNNER_OS}-${RUNNER_ARCH}" in
-          Linux-X64) ASSET="seal-linux-amd64*.zip" ;;
-          Linux-ARM64) ASSET="seal-linux-arm64*.zip" ;;
-          Windows-X64) ASSET="seal-windows-amd64*.zip" ;;
-          macOS-X64) ASSET="seal-darwin-amd64*.pkg" ;;
-          macOS-ARM64) ASSET="seal-darwin-arm64*.pkg" ;;
+          Linux-X64) PLATFORM="linux-amd64"; EXT="zip" ;;
+          Linux-ARM64) PLATFORM="linux-arm64"; EXT="zip" ;;
+          Windows-X64) PLATFORM="windows-amd64"; EXT="zip" ;;
+          macOS-X64) PLATFORM="darwin-amd64"; EXT="pkg" ;;
+          macOS-ARM64) PLATFORM="darwin-arm64"; EXT="pkg" ;;
           *)
             echo "::error::Unsupported runner: ${RUNNER_OS} ${RUNNER_ARCH}"
             exit 1
             ;;
         esac
+        # asset names carry the release tag, and the newest release is also tagged "latest"
+        TAG="${CLI_VERSION:-latest}"
+        ASSET="seal-${PLATFORM}-${TAG}.${EXT}"
+        URL="https://github.com/${CLI_REPO}/releases/download/${TAG}/${ASSET}"
         CLI_DIR="${RUNNER_TEMP}/seal-cli"
         if [[ "${RUNNER_OS}" == "Windows" ]]; then
           CLI_DIR="$(cygpath -u "${RUNNER_TEMP}")/seal-cli"
@@ -90,14 +92,16 @@ runs:
         # not concurrent-safe for multiple jobs
         rm -rf "${CLI_DIR}"
         mkdir -p "${CLI_DIR}"
-        echo "Downloading ${ASSET}"
-        gh --repo "${CLI_REPO}" release download "${CLI_VERSION}" -p "${ASSET}" --dir "${CLI_DIR}"
-        ARCHIVES=("${CLI_DIR}"/${ASSET})
-        if [[ ${#ARCHIVES[@]} -ne 1 ]]; then
-          echo "::error::Expected one release asset matching ${ASSET}, found ${#ARCHIVES[@]}"
+        ARCHIVE="${CLI_DIR}/${ASSET}"
+        echo "Downloading ${URL}"
+        if command -v curl > /dev/null 2>&1; then
+          curl --retry 3 -fsSL "${URL}" -o "${ARCHIVE}"
+        elif command -v wget > /dev/null 2>&1; then
+          wget -q --tries=3 "${URL}" -O "${ARCHIVE}"
+        else
+          echo "::error::The runner has neither curl nor wget to download the Seal CLI; install one of them before this action runs"
           exit 1
         fi
-        ARCHIVE="${ARCHIVES[0]}"
         case "${RUNNER_OS}" in
           Linux)
             unzip -q "${ARCHIVE}" -d "${CLI_DIR}"
@@ -116,11 +120,29 @@ runs:
         echo "cli_dir=${CLI_DIR}" >> ${GITHUB_OUTPUT}
         echo "archive_path=${ARCHIVE}" >> ${GITHUB_OUTPUT}
         echo "cli_path=${CLI_PATH}" >> ${GITHUB_OUTPUT}
+    - name: "Provide envsubst for cosign-installer"
+      if: runner.os == 'Linux' && inputs.verify_signature != 'false'
+      shell: bash
+      run: |
+        # cosign-installer only passes its install-dir through envsubst, and the install-dir below has no variables,
+        # so on images without gettext a pass-through stand-in gives the same result
+        if ! command -v envsubst > /dev/null 2>&1; then
+          mkdir -p "${RUNNER_TEMP}/seal-shims"
+          printf '#!/bin/sh\nexec cat\n' > "${RUNNER_TEMP}/seal-shims/envsubst"
+          chmod +x "${RUNNER_TEMP}/seal-shims/envsubst"
+          echo "${RUNNER_TEMP}/seal-shims" >> "${GITHUB_PATH}"
+        fi
     - name: "Install cosign"
       if: runner.os != 'macOS' && inputs.verify_signature != 'false'
       uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       with:
         cosign-release: "v3.1.3"
+        install-dir: ${{ runner.temp }}/seal-cosign
+    - name: "Remove the envsubst stand-in"
+      # even when cosign-installer fails, so that no later step mistakes the stand-in for the real envsubst
+      if: always() && runner.os == 'Linux'
+      shell: bash
+      run: rm -rf "${RUNNER_TEMP}/seal-shims"
     - name: "Verify CLI signature - Linux and Windows"
       if: runner.os != 'macOS' && inputs.verify_signature != 'false'
       shell: bash

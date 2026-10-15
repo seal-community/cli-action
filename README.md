@@ -128,7 +128,7 @@ Older CLI releases are not signed, so the check fails for them: Linux builds bef
 
 ## Requirements
 
-- **A supported runner**, GitHub-hosted or self-hosted: Linux x64 or Arm64 (`ubuntu-latest`, `ubuntu-24.04-arm`), macOS on Apple Silicon or Intel (`macos-latest`, `macos-15-intel`), or Windows x64 (`windows-latest`). Self-hosted runners need the GitHub CLI (`gh`), plus `unzip` on Linux and Windows, and Windows runners also need [Git for Windows](https://gitforwindows.org), because the action runs its steps in Bash. GitHub-hosted runners already have all of these. For any other CI system, [install the CLI](https://docs.sealsecurity.io/setup-apps-os/cli-in-cicd/installing-the-cli) directly.
+- **A supported runner**, GitHub-hosted or self-hosted: Linux x64 or Arm64 (`ubuntu-latest`, `ubuntu-24.04-arm`), macOS on Apple Silicon or Intel (`macos-latest`, `macos-15-intel`), or Windows x64 (`windows-latest`). Self-hosted runners need `curl` or `wget` to download the CLI, plus `unzip` on Linux and Windows; the signature check on Linux and Windows also needs `curl` and `sha256sum` (or `shasum`) for [cosign-installer](https://github.com/sigstore/cosign-installer), and Windows runners also need [Git for Windows](https://gitforwindows.org), because the action runs its steps in Bash. GitHub-hosted runners already have all of these. For any other CI system, [install the CLI](https://docs.sealsecurity.io/setup-apps-os/cli-in-cicd/installing-the-cli) directly.
 - Network access to the Seal Platform and Seal's artifact servers. See [Common issues](https://docs.sealsecurity.io/setup-apps-os/cli-in-cicd/common-issues) if a run fails.
 
 ## Versioning
